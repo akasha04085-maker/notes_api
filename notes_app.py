@@ -1,3 +1,4 @@
+import os
 import jwt
 import datetime
 import sqlite3
@@ -18,6 +19,7 @@ def init_db():
                     content TEXT
                     )
                 ''')
+    print(os.path.abspath(DB_NAME))
     conn.commit()
     conn.close()
     
@@ -91,6 +93,12 @@ def add_note():
     title = data.get('title')
     content = data.get('content')
     
+    if not title or not content:
+        return jsonify({
+        "status": "error",
+        "message": "Title and content are required"
+    }), 400
+    
     conn = sqlite3.connect(DB_NAME)
     
     conn.execute(
@@ -109,9 +117,22 @@ def add_note():
 @token_required
 def get_notes():
     
+    sort = request.args.get('sort', 'id')
+    
+    page = int(request.args.get('page', 1))
+    
+    limit = int(request.args.get('limit', 2))
+    
+    offset = (page - 1) * limit
+    
     conn = sqlite3.connect(DB_NAME)
     
-    cursor = conn.execute("SELECT * FROM notes")
+    if sort not in ['id', 'title']:
+        sort = 'id'
+    
+    query = f"SELECT * FROM notes ORDER BY {sort} ASC LIMIT ? OFFSET ?"
+    
+    cursor = conn.execute(query, (limit, offset))
     
     notes = []
     
@@ -125,6 +146,8 @@ def get_notes():
     conn.close()
     return jsonify({
         "status": "success",
+        "page": page,
+        "limit": limit,
         "data": notes
     }), 200
 
@@ -220,6 +243,36 @@ def delete_note_delete(id):
         "status": "success",
         "message": "Note deleted successfully" 
     }), 200 
+    
+@app.route('/search', methods=['GET'])
+@token_required
+def search_notes():
+    
+    title = request.args.get('title')
+    
+    conn = sqlite3.connect(DB_NAME)
+    
+    cursor = conn.execute(
+        "SELECT * FROM notes WHERE title LIKE ?",
+        (f"%{title}%",)
+    )
+    
+    notes = []
+    
+    for row in cursor:
+        notes.append({
+            "id": row[0],
+            "title": row[1],
+            "content": row[2]
+        })
+        
+    conn.close()
+    
+    return jsonify({
+        "status": "success",
+        "data": notes
+    })
+    
 
 if __name__ == '__main__':
     init_db()
