@@ -1,5 +1,6 @@
 import os
 import jwt
+import bcrypt
 import datetime
 import sqlite3
 from functools import wraps
@@ -40,10 +41,27 @@ def init_db():
     conn.commit()
     conn.close()
     
+@app.route('/users')
+def get_users():
+    conn = sqlite3.connect(DB_NAME)
+    
+    cursor = conn.execute("SELECT id, username, password FROM users")
+    
+    users = []
+    
+    for row in cursor:
+        users.append({
+            "id": row[0],
+            "username": row[1],
+            "password": row[2]
+        })
+    conn.close()
+    return jsonify(users)
 @app.route('/register', methods=['post'])
 def register():
     
     data = request.get_json()
+    
     
     username = data.get('username')
     password = data.get('password')
@@ -56,9 +74,13 @@ def register():
         
     conn = sqlite3.connect(DB_NAME)
     try:
+        hashed_password = bcrypt.hashpw(
+            password.encode('utf-8'),
+            bcrypt.gensalt()
+        ).decode('utf-8')
         conn.execute(
-            "INSERT INTO users (username, password) VALUES (?, ?)",
-            (username, password)
+            "INSERT INTO users (username,password) VALUES (?, ?)",
+            (username, hashed_password)
         )
         conn.commit()
         return jsonify({
